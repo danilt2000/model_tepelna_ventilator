@@ -31,6 +31,9 @@ int main(void) {
 
 
 
+
+
+
 	HEATFAN_Init();
 	HEATFAN_CtrlSignalSel(HEATFAN_Heater);
 	HEATFAN_SetPWMDuty(pwm_duty);
