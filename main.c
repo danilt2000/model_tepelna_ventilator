@@ -22,11 +22,13 @@ uint8_t pwm_duty = 0;
 static int i = 0;
 char buff[20];
 uint16_t MaxTemperature = 0;
+int IsHeatingOn = 1;
 void ADCInit(void);
 uint32_t ADCCalibrate(void);
 void MainTask(void* pvParameters);
 void MaxTemparatureSetter(void* pvParameters);
 void HeatingOnOff(void* pvParameters);
+static inline int IsKeyPressed(int pin);
 
 void delay(void) {
 	uint32_t i;
@@ -56,7 +58,7 @@ int main(void) {
 
 	xTaskCreate(MainTask, /* ukazatel na task */
 	"Main", /* jmeno tasku pro ladeni - kernel awareness debugging */
-	configMINIMAL_STACK_SIZE+500, /* velikost zasobniku = task stack size */
+	configMINIMAL_STACK_SIZE+100, /* velikost zasobniku = task stack size */
 	(void*)NULL, /* pripadny parametr pro task = optional task startup argument */
 	tskIDLE_PRIORITY+1, /* priorita tasku = initial priority */
 	(xTaskHandle*)NULL /* pripadne handle na task, pokud ma byt vytvoreno */
@@ -64,7 +66,7 @@ int main(void) {
 
 	xTaskCreate(MaxTemparatureSetter, /* ukazatel na task */
 	"MaxTemparatureSetter", /* jmeno tasku pro ladeni - kernel awareness debugging */
-	configMINIMAL_STACK_SIZE+500, /* velikost zasobniku = task stack size */
+	configMINIMAL_STACK_SIZE+100, /* velikost zasobniku = task stack size */
 	(void*)NULL, /* pripadny parametr pro task = optional task startup argument */
 	tskIDLE_PRIORITY+2, /* priorita tasku = initial priority */
 	(xTaskHandle*)NULL /* pripadne handle na task, pokud ma byt vytvoreno */
@@ -72,9 +74,9 @@ int main(void) {
 
 	xTaskCreate(HeatingOnOff, /* ukazatel na task */
 	"HeatingOnOff", /* jmeno tasku pro ladeni - kernel awareness debugging */
-	configMINIMAL_STACK_SIZE+500, /* velikost zasobniku = task stack size */
+	configMINIMAL_STACK_SIZE+100, /* velikost zasobniku = task stack size */
 	(void*)NULL, /* pripadny parametr pro task = optional task startup argument */
-	tskIDLE_PRIORITY+2, /* priorita tasku = initial priority */
+	tskIDLE_PRIORITY+3, /* priorita tasku = initial priority */
 	(xTaskHandle*)NULL /* pripadne handle na task, pokud ma byt vytvoreno */
 	);
 
@@ -116,37 +118,24 @@ void HeatingOnOff(void* pvParameters) {
 	for (;;) {
 
 		if (IsKeyPressed(ON_PIN)) {
-			LCD_clear();
-			sprintf(buff, "Teplota: %d.%d", temperature / 10, temperature % 10);
-			LCD_set_cursor(1, 1);
-			LCD_puts(buff);
+			IsHeatingOn=!IsHeatingOn;
+			vTaskDelay(500 / portTICK_RATE_MS);
+			if(IsHeatingOn)
+			{
+				pwm_duty = 100;
 
-			sprintf(buff, "Otacky: %5d", fan_rpm);
-			LCD_set_cursor(2, 1);
-			LCD_puts(buff);
-
-			sprintf(buff, "Max Teplota: %d.%d", MaxTemperature / 10,
-					MaxTemperature % 10);
-			LCD_set_cursor(4, 1);
-			LCD_puts(buff);
-
-			pwm_duty = 0;
-			LCD_puts("Topeni OFF");
-			delay();
-			LCD_clear();
-
+			}
+			else{
+				pwm_duty = 0;
+			}
 		}
 
 		// zapnout LED (clear pin)
 
-		if ((PTA->PDIR & (1 << OFF_PIN)) == 0) {
 
-			pwm_duty = 100;
-
-		}
 
 		// vypnout LED (set pin)
-
+		vTaskDelay(100 / portTICK_RATE_MS);
 	}
 }
 void MaxTemparatureSetter(void* pvParameters) {
@@ -175,6 +164,8 @@ void MainTask(void* pvParameters) {
 	for (;;) {
 		int temperature, fan_rpm;
 
+
+
 		temperature = HEATFAN_GetTemperature();	// Pozor, teplota je v desetinach st.C
 		fan_rpm = HEATFAN_GetFanRPM();
 
@@ -194,17 +185,25 @@ void MainTask(void* pvParameters) {
 		int CurrentTemplature = HEATFAN_GetTemperature();
 
 		LCD_set_cursor(3, 1);
+		if(IsHeatingOn){
 		if (temperature < MaxTemperature) {
 			pwm_duty = 100;
 			LCD_puts("Topeni ON ");
 		} else {
 			pwm_duty = 0;
 			LCD_puts("Topeni OFF");
+			}
 		}
+		if(!IsHeatingOn){
+			LCD_puts("Topeni OFF");
+		}
+
+
 
 		HEATFAN_SetPWMDuty(pwm_duty);
 		delay();
 		LCD_clear();
+
 	}
 }
 void ADCInit(void) {
