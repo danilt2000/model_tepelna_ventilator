@@ -10,11 +10,19 @@
 #include "heat_fan.h"
 #include <stdio.h>
 #include "MKL25Z4.h"
+#include "FreeRTOS.h"
+#include "semphr.h" // FreeRTOS semafory a mutexy
+#include "drv_lcd.h"
 
 static int i = 0;
+
 char buff[20];
+
 void ADCInit(void);
+
 uint32_t ADCCalibrate(void);
+
+void MainTask( void* pvParameters );
 
 void delay(void) {
 	uint32_t i;
@@ -25,6 +33,28 @@ void delay(void) {
 int main(void) {
 	int temperature, fan_rpm;
 	uint8_t pwm_duty = 0;
+
+	BaseType_t status = xTaskCreate(
+	MainTask, /* ukazatel na task */
+	"Main", /* jmeno tasku pro ladeni - kernel awareness debugging */
+	configMINIMAL_STACK_SIZE, /* velikost zasobniku = task stack size */
+	(void*)NULL, /* pripadny parametr pro task = optional task startup argument */
+	tskIDLE_PRIORITY, /* priorita tasku = initial priority */
+	(xTaskHandle*)NULL /* pripadne handle na task, pokud ma byt vytvoreno */
+	);
+
+
+
+	if ( status != pdPASS) {
+
+	while(1) {
+	; /* error! probably out of memory */
+		}
+	}
+
+
+
+
 
 	LCD_initialize();
 	LCD_clear();
@@ -111,6 +141,51 @@ int main(void) {
 
 	/* Never leave main */
 	return 0;
+}
+void MainTask( void* pvParameters )
+{
+(void) pvParameters; /* parameter not used */
+
+
+//
+// 1. varianta kodu: pozastaveni na danou dobu (nepresne)
+//
+/*
+for (;;) {
+// Prepnuti stavu LED
+RED_LED_TOGGLE();
+
+// Pozastaveni procesu na dany pocet tiku.
+// Pro vypocet doby pozastaveni v milisekundach se pouziva makro portTICK_RATE_MS
+// coz je asi 1/(pocet tiku za milisekundu)
+// POZOR: vTaskDelay se nedoporucuje ulohy, ktere maji byt spousteny
+// s presnou periodou, protoze doba pozastaveni je relativni - task je
+// pozastaven na dany pocet tiku od okamziku volani.
+// Pro presne periodicke casovani je doporucena vTaskDelayUntil.
+vTaskDelay(1000 / portTICK_RATE_MS);
+}
+*/
+
+
+//
+// 2. varianta kodu: zajisteni spousteni kodu v presnych intervalech
+//
+
+const TickType_t xFrequency = 500 / portTICK_RATE_MS;
+TickType_t xLastWakeTime;
+
+// Initialise the xLastWakeTime variable with the current time.
+xLastWakeTime = xTaskGetTickCount();
+for (;;) {
+
+// Prepnuti stavu LED
+RED_LED_TOGGLE();
+vTaskDelay(200 / portTICK_RATE_MS);
+
+// Postaveni do doby dalsiho spusteni s konstantni periodou
+vTaskDelayUntil(&xLastWakeTime, xFrequency);
+}
+
 }
 void ADCInit(void)
 {
